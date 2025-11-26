@@ -1,0 +1,379 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "mysql"
+    url      = env("DATABASE_URL")
+}
+
+model users {
+    id            Int       @id @default(autoincrement())
+    name          String    @db.VarChar(255)
+    username      String    @unique(map: "username") @db.VarChar(255)
+    email         String?   @unique(map: "email") @db.VarChar(255)
+    password      String?   @db.VarChar(255)
+    referral_code String    @unique(map: "referral_code") @db.VarChar(255)
+    is_default    Boolean?  @default(false)
+    role_id       Int
+    phone         String?   @db.VarChar(255)
+    is_gmail      Boolean?  @default(false)
+    status        Boolean?  @default(true)
+    created_by    Int       @default(1)
+    created_at    DateTime  @default(now()) @db.DateTime(0)
+    updated_at    DateTime  @default(now()) @db.DateTime(0)
+    deleted_at    DateTime? @db.DateTime(0)
+
+    user_profile     user_profiles?
+    org_member       b2b_org_members[]
+    ielts_user_quota ielts_user_quota[]
+    toefl_user_quota toefl_user_quota[]
+
+    @@index([status, deleted_at], name: "idx_users_status_del")
+}
+
+model user_profiles {
+    id             Int       @id @default(autoincrement())
+    user_id        Int       @unique
+    nationality    String    @db.Text
+    country_origin String    @db.Text
+    first_language String    @db.Text
+    created_by     Int       @default(1)
+    created_at     DateTime  @default(now()) @db.DateTime(0)
+    updated_at     DateTime  @default(now()) @db.DateTime(0)
+    deleted_at     DateTime? @db.DateTime(0)
+    users          users     @relation(fields: [user_id], references: [id])
+}
+
+model ielts_user_quota {
+    id           Int       @id @default(autoincrement())
+    user_id      Int
+    package_type Int?
+    quota        Int?
+    price        Decimal?  @db.Decimal(10, 2)
+    currency     String?   @db.VarChar(255)
+    expired_date DateTime?
+    external_id  String?   @db.VarChar(255)
+    created_at   DateTime  @default(now())
+    updated_at   DateTime  @default(now())
+    deleted_at   DateTime?
+    user         users     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+    @@index([user_id, package_type], name: "idx_ielts_user_quota_user_type")
+    @@map("ielts_user_quota")
+}
+
+model IeltsUserTest {
+    id            Int       @id @default(autoincrement())
+    time          Int?
+    testDate      String?
+    userId        Int
+    ieltsHeaderId Int
+    token         String?
+    isEnded       Boolean?
+    session       Int?
+    type          Int
+    createdAt     DateTime  @default(now())
+    updatedAt     DateTime  @updatedAt
+    deletedAt     DateTime?
+}
+
+model toefl_user_quota {
+    id                     Int       @id @default(autoincrement())
+    user_id                Int
+    package_type           Int?
+    quota                  Int?
+    price                  Decimal?  @db.Decimal(10, 2)
+    currency               String?   @db.VarChar(255)
+    expired_date           DateTime?
+    external_id            String?   @db.VarChar(255)
+    payment_transaction_id BigInt?
+    created_at             DateTime  @default(now()) @db.DateTime(0)
+    updated_at             DateTime  @default(now()) @db.DateTime(0)
+    deleted_at             DateTime?
+    user                   users     @relation(fields: [user_id], references: [id])
+
+    @@index([user_id, package_type], name: "idx_toefl_user_quota_user_type")
+}
+
+model b2b_orgs {
+    id              Int                         @id @default(autoincrement())
+    name            String?                     @db.VarChar(255)
+    logo            String?                     @db.Text
+    status          Boolean?                    @default(true)
+    created_by      Int?                        @default(1)
+    created_at      DateTime                    @default(now()) @db.DateTime(0)
+    updated_at      DateTime                    @default(now()) @db.DateTime(0)
+    deleted_at      DateTime?                   @db.DateTime(0)
+    b2b_members     b2b_org_members[]
+    b2b_toefl_quota b2b_org_toefl_quotas[]
+    b2b_ielts_quota b2b_org_ielts_quotas[]
+    b2b_payment     b2b_org_payment_histories[]
+
+    @@index([status, deleted_at], name: "idx_orgs_status_del")
+}
+
+enum b2b_role {
+    Admin
+    User
+}
+
+model b2b_org_members {
+    id         Int       @id @default(autoincrement())
+    b2b_org_id Int
+    user_id    Int
+    role       b2b_role  @default(User)
+    status     Boolean?  @default(true)
+    created_by Int?      @default(1)
+    created_at DateTime  @default(now()) @db.DateTime(0)
+    updated_at DateTime  @default(now()) @db.DateTime(0)
+    deleted_at DateTime? @db.DateTime(0)
+    b2b_org    b2b_orgs  @relation(fields: [b2b_org_id], references: [id], onDelete: Cascade)
+    users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+    @@index([b2b_org_id, status, deleted_at], name: "idx_org_members_org_status_del")
+    @@index([user_id, deleted_at], name: "idx_org_members_user_del")
+}
+
+model b2b_org_package {
+    id            Int       @id @default(autoincrement())
+    test_type_id  Int
+    title         String    @db.Text
+    test_category String
+    attempt_quota Int
+    status        Boolean?  @default(true)
+    created_by    Int?      @default(1)
+    created_at    DateTime  @default(now()) @db.DateTime(0)
+    updated_at    DateTime  @default(now()) @db.DateTime(0)
+    deleted_at    DateTime? @db.DateTime(0)
+
+    // RELATION
+    prices b2b_org_price[]
+}
+
+model b2b_org_price {
+    id         Int @id @default(autoincrement())
+    package_id Int
+
+    price_idr      Decimal @db.Decimal(14, 2)
+    fake_price_idr Decimal @db.Decimal(14, 2)
+
+    price_usd      Decimal @db.Decimal(14, 2)
+    fake_price_usd Decimal @db.Decimal(14, 2)
+
+    price_mmk      Decimal @db.Decimal(14, 2)
+    fake_price_mmk Decimal @db.Decimal(14, 2)
+
+    price_vnd      Decimal @db.Decimal(14, 2)
+    fake_price_vnd Decimal @db.Decimal(14, 2)
+
+    price_thb      Decimal @db.Decimal(14, 2)
+    fake_price_thb Decimal @db.Decimal(14, 2)
+
+    price_myr      Decimal @db.Decimal(14, 2)
+    fake_price_myr Decimal @db.Decimal(14, 2)
+
+    created_at DateTime  @default(now()) @db.DateTime(0)
+    updated_at DateTime  @default(now()) @db.DateTime(0)
+    deleted_at DateTime? @db.DateTime(0)
+
+    // RELATION
+    package b2b_org_package @relation(fields: [package_id], references: [id])
+}
+
+model b2b_org_toefl_quotas {
+    id           Int       @id @default(autoincrement())
+    b2b_org_id   Int
+    test_type_id Int
+    external_id  String?   @db.Text
+    total_quota  Int
+    expired_dt   DateTime  @default(now()) @db.DateTime(0)
+    status       Boolean?  @default(true)
+    created_by   Int?      @default(1)
+    created_at   DateTime  @default(now()) @db.DateTime(0)
+    updated_at   DateTime  @default(now()) @db.DateTime(0)
+    deleted_at   DateTime? @db.DateTime(0)
+    b2b_org      b2b_orgs  @relation(fields: [b2b_org_id], references: [id], onDelete: Cascade)
+
+    @@index([b2b_org_id, test_type_id, status, expired_dt, deleted_at], name: "idx_toefl_quota_org_type_status_exp_del")
+}
+
+model b2b_org_log_toefl_quotas {
+    id             Int       @id @default(autoincrement())
+    b2b_org_id     Int
+    admin_id       Int
+    user_id        Int?
+    test_type_id   Int
+    user_quota     Int?
+    org_quota_left Int
+    created_by     Int?      @default(1)
+    created_at     DateTime  @default(now()) @db.DateTime(0)
+    updated_at     DateTime  @default(now()) @db.DateTime(0)
+    deleted_at     DateTime? @db.DateTime(0)
+
+    @@index([b2b_org_id, test_type_id, created_at], name: "idx_toefl_log_org_type_created")
+}
+
+model b2b_org_ielts_quotas {
+    id           Int       @id @default(autoincrement())
+    b2b_org_id   Int
+    test_type_id Int
+    external_id  String?   @db.Text
+    total_quota  Int
+    status       Boolean?  @default(true)
+    expired_dt   DateTime  @default(now()) @db.DateTime(0)
+    created_by   Int?      @default(1)
+    created_at   DateTime  @default(now()) @db.DateTime(0)
+    updated_at   DateTime  @default(now()) @db.DateTime(0)
+    deleted_at   DateTime? @db.DateTime(0)
+    b2b_org      b2b_orgs  @relation(fields: [b2b_org_id], references: [id], onDelete: Cascade)
+
+    @@index([b2b_org_id, test_type_id, status, expired_dt, deleted_at], name: "idx_ielts_quota_org_type_status_exp_del")
+}
+
+model b2b_org_log_ielts_quotas {
+    id             Int       @id @default(autoincrement())
+    b2b_org_id     Int
+    admin_id       Int
+    user_id        Int?
+    test_type_id   Int
+    user_quota     Int?
+    org_quota_left Int
+    created_by     Int?      @default(1)
+    created_at     DateTime  @default(now()) @db.DateTime(0)
+    updated_at     DateTime  @default(now()) @db.DateTime(0)
+    deleted_at     DateTime? @db.DateTime(0)
+
+    @@index([b2b_org_id, test_type_id, created_at], name: "idx_ielts_log_org_type_created")
+}
+
+model b2b_org_payment_histories {
+    id          Int       @id @default(autoincrement())
+    userId      Int
+    orgId       Int
+    externalId  String    @unique
+    paymentId   String?   @db.VarChar(100)
+    invoiceId   String?   @db.VarChar(100)
+    status      String    @db.VarChar(30)
+    method      String?   @db.VarChar(30)
+    channel     String?   @db.VarChar(50)
+    amount      Decimal   @default(0.00) @db.Decimal(12, 2)
+    currency    String    @default("IDR") @db.VarChar(10)
+    paidAt      DateTime?
+    payerEmail  String?   @db.VarChar(255)
+    cardNetwork String?   @db.VarChar(20)
+    cardLast4   String?   @db.VarChar(4)
+    bankCode    String?   @db.VarChar(20)
+    vaLast      String?   @db.VarChar(12)
+    rawPayload  Json?
+    created_by  Int?      @default(1)
+    created_at  DateTime  @default(now()) @db.DateTime(0)
+    updated_at  DateTime  @default(now()) @db.DateTime(0)
+    deleted_at  DateTime? @db.DateTime(0)
+    b2b_org     b2b_orgs  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+    @@index([orgId, status, method, channel, currency], name: "idx_payments_filter")
+    @@index([orgId, created_at], name: "idx_payments_org_created")
+}
+
+model IeltsFullTestCertificate {
+    id              Int      @id @default(autoincrement())
+    user_id         Int      @map("userId")
+    token           String   @db.Text
+    test_date       DateTime
+    registration_id String
+    general_comment String   @db.Text
+    listening_score Float
+    reading_score   Float
+    writing_score   Float
+    speaking_score  Float
+    overall_band    Float
+    cefr_level      String
+}
+
+model ToeflFullTestCertificate {
+    id             Int      @id @default(autoincrement())
+    userId         Int      @map("userId")
+    token          String   @db.Text
+    testDate       DateTime
+    registrationId String
+    generalComment String   @db.Text
+    listeningScore Float
+    structureScore Float
+    readingScore   Float
+    overall        Float
+    cefrLevel      String
+}
+
+model IeltsUserTestResult {
+    id                    Int       @id @default(autoincrement())
+    totalCorrect          Int?
+    totalCorrectPart      String?
+    spendTime             String?
+    overall               String?
+    ieltsUserTestId       Int
+    userId                Int
+    ieltsBandId           Int?
+    ieltsDescriptorId     String?
+    speakingScoreAnalysis String?   @db.Text
+    createdAt             DateTime  @default(now())
+    updatedAt             DateTime  @updatedAt
+    deletedAt             DateTime?
+}
+
+model ToeflUserTest {
+    id                    Int                   @id @default(autoincrement())
+    userId                Int
+    toeflQuestionHeaderId String                @db.Text
+    token                 String                @db.Text
+    type                  Int
+    time                  String                @db.Text
+    isEnded               Boolean               @default(false)
+    session               String                @db.Text
+    results               ToeflUserTestResult[]
+
+    createdAt DateTime  @default(now())
+    updatedAt DateTime  @updatedAt
+    deletedAt DateTime?
+}
+
+model ToeflUserTestResult {
+    id                Int    @id @default(autoincrement())
+    toeflUserTestId   Int
+    totalCorrect      Int
+    totalCorrectPart  String @db.Text
+    comment           String @db.Text
+    overall           Int
+    toeflCefrId       Int
+    toeflDescriptorId Int
+
+    createdAt DateTime  @default(now())
+    updatedAt DateTime  @updatedAt
+    deletedAt DateTime?
+
+    userTest ToeflUserTest @relation(fields: [toeflUserTestId], references: [id], onDelete: Cascade)
+
+    @@index([toeflUserTestId])
+    @@index([toeflCefrId])
+    @@index([toeflDescriptorId])
+}
+
+model ielts_m_type {
+    id         Int       @id @default(autoincrement())
+    type       String?   @db.VarChar(255)
+    created_at DateTime  @default(now())
+    updated_at DateTime  @default(now())
+    deleted_at DateTime?
+
+    @@map("ielts_m_type")
+}
+
+model toefl_m_type {
+    id         Int       @id @default(autoincrement())
+    type       String?   @db.VarChar(255)
+    created_at DateTime  @default(now())
+    updated_at DateTime  @default(now())
+    deleted_at DateTime?
+
+    @@map("toefl_m_type")
+}
