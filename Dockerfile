@@ -69,7 +69,7 @@ EXPOSE 3026
 
 # Optional healthcheck — change the path if your app differs
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 --start-period=20s \
-  CMD wget -qO- http://127.0.0.1:3044/health || exit 1
+  CMD wget -qO- http://127.0.0.1:3026/health || exit 1
 
 # Use tini so Node gets proper signals and doesn’t “die” on restarts
 ENTRYPOINT ["/sbin/tini","--"]
