@@ -79,21 +79,17 @@ export class ResultsService {
     const userIds = members.map((m) => m.user_id);
 
     // Semua IELTS test yang sudah selesai
-    const testsGroup = await this.prisma.ieltsUserTest.groupBy({
-      by: ['token'],
+    const tests = await this.prisma.ieltsUserTest.findMany({
       where: {
         userId: { in: userIds },
         isEnded: true,
         deletedAt: null,
       },
-      orderBy: { token: 'asc' },
+      distinct:['token'],
+      orderBy: { createdAt: 'desc' },
     });
 
-    const tests = await this.prisma.ieltsUserTest.findMany({
-      where: {
-        token: { in: testsGroup.map((item) => item.token!) },
-      },
-    });
+   
 
     // Kalau belum ada test sama sekali
     if (!tests.length) {
@@ -311,6 +307,7 @@ export class ResultsService {
         isEnded: true,
         deletedAt: null,
       },
+      distinct:['token'],
       orderBy: { createdAt: 'desc' },
     });
 
@@ -505,19 +502,13 @@ export class ResultsService {
       });
     }
 
-    const findGroupedTest = await this.prisma.ieltsUserTest.groupBy({
-      by: ['token'],
+    const tests = await this.prisma.ieltsUserTest.findMany({
       where: {
         userId,
         isEnded: true,
         deletedAt: null,
       },
-      orderBy: { token: 'asc' },
-    });
-    const tests = await this.prisma.ieltsUserTest.findMany({
-      where: {
-        token: { in: findGroupedTest.map((item) => item.token!) },
-      },
+      distinct:['token'],
       orderBy: { createdAt: 'desc' },
     });
 
@@ -660,6 +651,7 @@ export class ResultsService {
         isEnded: true,
         deletedAt: null,
       },
+      distinct:['token'],
       orderBy: { createdAt: 'desc' },
     });
 
