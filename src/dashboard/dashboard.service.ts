@@ -651,13 +651,13 @@ export class DashboardService {
     const bestCefrRankByUser = new Map<number, number>();
 
     // IELTS certificates (cefr_level)
-    for (const cert of ieltsCerts) {
-      const raw = cert.cefr_level?.trim().toUpperCase();
+    for (const cert of toeflCerts) {
+      const raw = cert.cefrLevel?.trim().toUpperCase();
       if (!raw) continue;
       const rank = CEFR_RANK[raw];
       if (!rank) continue;
-      const current = bestCefrRankByUser.get(cert.user_id) ?? 0;
-      if (rank > current) bestCefrRankByUser.set(cert.user_id, rank);
+      const current = bestCefrRankByUser.get(cert.userId) ?? 0;
+      if (rank > current) bestCefrRankByUser.set(cert.userId, rank);
     }
 
     // TOEFL certificates (cefrLevel or mapping from overall)
