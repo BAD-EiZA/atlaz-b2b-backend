@@ -11,6 +11,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { OrgPackagesModule } from './packages/packages.module';
 import { ResultsModule } from './results/results.module';
+import { VouchersModule } from './vouchers/vouchers.module';
 
 @Module({
   imports: [
@@ -25,7 +26,8 @@ import { ResultsModule } from './results/results.module';
     UsersModule,
     DashboardModule,
     OrgPackagesModule,
-    ResultsModule
+    ResultsModule,
+    VouchersModule
   ],
 })
 export class AppModule {}

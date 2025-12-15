@@ -85,11 +85,9 @@ export class ResultsService {
         isEnded: true,
         deletedAt: null,
       },
-      distinct:['token'],
+      distinct: ['token'],
       orderBy: { createdAt: 'desc' },
     });
-
-   
 
     // Kalau belum ada test sama sekali
     if (!tests.length) {
@@ -163,7 +161,6 @@ export class ResultsService {
 
       for (const t of userTests) {
         const label = typeName[t.type] || `Type ${t.type}`;
-        console.log(label, 'LAB');
         const lowerLabel = (label || '').toLowerCase();
         const isComplete = lowerLabel.includes('complete');
 
@@ -181,14 +178,12 @@ export class ResultsService {
         let overall: number | null = null;
 
         if (isComplete && cert) {
-          // COMPLETE – ambil dari certificate
           listening = Number(cert.listening_score ?? null);
           reading = Number(cert.reading_score ?? null);
           writing = Number(cert.writing_score ?? null);
           speaking = Number(cert.speaking_score ?? null);
           overall = Number(cert.overall_band ?? null);
         } else if (resOverall != null) {
-          // NON-COMPLETE – mapping overall ke skill sesuai nama type
           if (lowerLabel.includes('listen')) {
             listening = resOverall;
           } else if (lowerLabel.includes('read')) {
@@ -201,7 +196,6 @@ export class ResultsService {
           overall = resOverall;
         }
 
-        // Set latest band per skill (urutan userTests sudah desc)
         if (listening != null && latestBands.listening == null) {
           latestBands.listening = listening;
         }
@@ -215,7 +209,6 @@ export class ResultsService {
           latestBands.speaking = speaking;
         }
 
-        // Isi testDetails maksimal 5 attempts
         if (testDetails.length < 5) {
           testDetails.push({
             testId: t.id,
@@ -230,7 +223,6 @@ export class ResultsService {
         }
       }
 
-      // hitung overallBand hanya kalau 4 skill lengkap
       let overallBand: number | null = null;
       const bands = [
         latestBands.listening,
@@ -242,6 +234,10 @@ export class ResultsService {
         overallBand = this.calculateIeltsOverall(bands as number[]);
       }
 
+      // NEW: tanggal tes terakhir & tanggal dibuat
+      const recentlyDone = userTests.length ? userTests[0].createdAt : null;
+      const createdAt = member.created_at;
+
       return {
         id: member.users.id,
         studentName: member.users.name,
@@ -251,6 +247,8 @@ export class ResultsService {
         readingBand: latestBands.reading,
         writingBand: latestBands.writing,
         speakingBand: latestBands.speaking,
+        recentlyDone,
+        createdAt,
         testDetails,
       };
     });
@@ -307,7 +305,7 @@ export class ResultsService {
         isEnded: true,
         deletedAt: null,
       },
-      distinct:['token'],
+      distinct: ['token'],
       orderBy: { createdAt: 'desc' },
     });
 
@@ -378,7 +376,6 @@ export class ResultsService {
 
       for (const t of userTests) {
         const label = typeName[t.type] || `Type ${t.type}`;
-        console.log(typeName, 'LAB');
         const lowerLabel = (label || '').toLowerCase();
         const isComplete = lowerLabel.includes('complete');
 
@@ -396,18 +393,11 @@ export class ResultsService {
           reading = Number(cert.readingScore ?? null);
           overall = Number(cert.overall ?? null);
         } else if (res) {
-          // NON-COMPLETE – punya overall dari result
           overall = Number(res.overall ?? null);
-
-          // Mapping overall ke section sesuai tipe
           const sectionScore =
             overall != null && !Number.isNaN(overall) ? overall : null;
 
           if (sectionScore != null) {
-            // contoh label:
-            // "Listening Only", "Paket Listening", "Structure & Written Expression",
-            // "Reading Test", dll.
-
             if (lowerLabel.includes('listening')) {
               listening = sectionScore;
             }
@@ -422,10 +412,6 @@ export class ResultsService {
             if (lowerLabel.includes('reading')) {
               reading = sectionScore;
             }
-
-            // kalau nanti ada paket kombinasi (misalnya "Listening & Reading"),
-            // kondisi di atas akan mengisi dua kolom sekaligus karena kedua kata
-            // ada di label.
           }
         }
 
@@ -465,6 +451,10 @@ export class ResultsService {
         );
       }
 
+      // NEW
+      const recentlyDone = userTests.length ? userTests[0].createdAt : null;
+      const createdAt = member.created_at;
+
       return {
         id: member.users.id,
         studentName: member.users.name,
@@ -473,6 +463,8 @@ export class ResultsService {
         listeningScore: latest.listening,
         structureScore: latest.structure,
         readingScore: latest.reading,
+        recentlyDone,
+        createdAt,
         testDetails,
       };
     });
@@ -508,7 +500,7 @@ export class ResultsService {
         isEnded: true,
         deletedAt: null,
       },
-      distinct:['token'],
+      distinct: ['token'],
       orderBy: { createdAt: 'desc' },
     });
 
@@ -651,7 +643,7 @@ export class ResultsService {
         isEnded: true,
         deletedAt: null,
       },
-      distinct:['token'],
+      distinct: ['token'],
       orderBy: { createdAt: 'desc' },
     });
 

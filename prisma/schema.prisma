@@ -181,6 +181,43 @@ model b2b_org_price {
     package b2b_org_package @relation(fields: [package_id], references: [id])
 }
 
+model redeem_vouchers {
+    id            Int                   @id @default(autoincrement())
+    title         String                @db.Text
+    code          String                @db.Text
+    voucher_type  voucher_type          @default(PERCENTAGE)
+    platform_type voucher_platform_type @default(B2C)
+    test_type     voucer_test_type      @default(IELTS)
+    amount        Int
+    one_time      Boolean
+    expired_dt    DateTime              @default(now()) @db.DateTime(0)
+    status        Boolean?              @default(true)
+    created_by    Int?                  @default(1)
+    created_at    DateTime              @default(now()) @db.DateTime(0)
+    updated_at    DateTime              @default(now()) @db.DateTime(0)
+    deleted_at    DateTime?             @db.DateTime(0)
+
+    // Relasi stacking
+    stackableWith voucher_stack_rules[] @relation("VoucherStackable")
+    stackedBy     voucher_stack_rules[] @relation("VoucherStackedBy")
+}
+
+model voucher_stack_rules {
+    id Int @id @default(autoincrement())
+    voucherId   Int
+    stackWithId Int
+    voucher   redeem_vouchers @relation("VoucherStackable", fields: [voucherId], references: [id])
+    stackWith redeem_vouchers @relation("VoucherStackedBy", fields: [stackWithId], references: [id])
+    created_at DateTime @default(now())
+}
+
+model redeemed_user_vouchers {
+    id Int @id @default(autoincrement())
+    user_id Int
+    voucher_id Int
+    
+}
+
 model b2b_org_toefl_quotas {
     id           Int       @id @default(autoincrement())
     b2b_org_id   Int
@@ -376,4 +413,19 @@ model toefl_m_type {
     deleted_at DateTime?
 
     @@map("toefl_m_type")
+}
+
+enum voucher_type {
+    NOMINAL_NUMBERS
+    PERCENTAGE
+}
+
+enum voucer_test_type {
+    TOEFL
+    IELTS
+}
+
+enum voucher_platform_type {
+    B2C
+    B2B
 }
