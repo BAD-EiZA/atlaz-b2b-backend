@@ -224,7 +224,7 @@ model b2b_org_toefl_quotas {
     test_type_id Int
     external_id  String?   @db.Text
     total_quota  Int
-    expired_dt   DateTime  @default(now()) @db.DateTime(0)
+    expired_dt   DateTime?  @default(now()) @db.DateTime(0)
     status       Boolean?  @default(true)
     created_by   Int?      @default(1)
     created_at   DateTime  @default(now()) @db.DateTime(0)
@@ -258,7 +258,7 @@ model b2b_org_ielts_quotas {
     external_id  String?   @db.Text
     total_quota  Int
     status       Boolean?  @default(true)
-    expired_dt   DateTime  @default(now()) @db.DateTime(0)
+    expired_dt   DateTime?  @default(now()) @db.DateTime(0)
     created_by   Int?      @default(1)
     created_at   DateTime  @default(now()) @db.DateTime(0)
     updated_at   DateTime  @default(now()) @db.DateTime(0)
