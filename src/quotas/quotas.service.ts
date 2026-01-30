@@ -93,17 +93,27 @@ export class QuotasService {
             },
           });
           if (existing) {
+            const date = new Date();
+            date.setMonth(date.getMonth() + 3);
+            date.setHours(23, 59, 59, 999);
             await tx.ielts_user_quota.update({
               where: { id: existing.id },
-              data: { quota: Number(existing.quota ?? 0) + dto.amount },
+              data: {
+                quota: Number(existing.quota ?? 0) + dto.amount,
+                expired_date: date,
+              },
             });
           } else {
+            const date = new Date();
+            date.setMonth(date.getMonth() + 3);
+            date.setHours(23, 59, 59, 999);
             await tx.ielts_user_quota.create({
               data: {
                 user_id: dto.user_id,
                 package_type: dto.test_type_id,
                 quota: dto.amount,
                 currency: 'IDR',
+                expired_date: date,
               },
             });
           }
@@ -138,17 +148,27 @@ export class QuotasService {
           });
 
           if (existing) {
+            const date = new Date();
+            date.setMonth(date.getMonth() + 3);
+            date.setHours(23, 59, 59, 999);
             await tx.toefl_user_quota.update({
               where: { id: existing.id },
-              data: { quota: Number(existing.quota ?? 0) + dto.amount },
+              data: {
+                quota: Number(existing.quota ?? 0) + dto.amount,
+                expired_date: date,
+              },
             });
           } else {
+            const date = new Date();
+            date.setMonth(date.getMonth() + 3);
+            date.setHours(23, 59, 59, 999);
             await tx.toefl_user_quota.create({
               data: {
                 user_id: dto.user_id,
                 package_type: dto.test_type_id,
                 quota: dto.amount,
                 currency: 'IDR',
+                expired_date: date,
               },
             });
           }
