@@ -35,6 +35,7 @@ export class MembersService {
     const skip = (page - 1) * pageSize;
     const take = pageSize;
 
+    // 1. Setup Filter Pencarian User
     const where: any = { b2b_org_id: orgId, role: 'User', deleted_at: null };
     if (dto.role) where.role = dto.role;
     if (dto.status !== undefined)
@@ -46,6 +47,7 @@ export class MembersService {
       ];
     }
 
+    // 2. Ambil Data Member (Pagination)
     const [total, members] = await this.db.$transaction([
       this.db.b2b_org_members.count({ where }),
       this.db.b2b_org_members.findMany({
@@ -58,71 +60,9 @@ export class MembersService {
     ]);
 
     const userIds = members.map((m) => m.user_id).filter(Boolean);
-    if (!userIds.length) {
-      // tidak ada member, return langsung
-      const data = members.map((m) => ({
-        ...m,
-        quotas: {
-          IELTS: {
-            Reading: 0,
-            Listening: 0,
-            Writing: 0,
-            Speaking: 0,
-            Complete: 0,
-          },
-          TOEFL: {
-            Reading: 0,
-            Listening: 0,
-            'Structure & Written Expression': 0,
-            Complete: 0,
-          },
-        },
-      }));
-      return { data, total, page, pageSize };
-    }
 
-    const [ieltsAgg, toeflAgg] = await this.db.$transaction([
-      this.db.ielts_user_quota.groupBy({
-        by: ['user_id', 'package_type'],
-        where: {
-          deleted_at: null,
-          user_id: { in: userIds },
-        },
-        _sum: { quota: true },
-        orderBy: {
-          package_type: 'asc',
-        },
-      }),
-      this.db.toefl_user_quota.groupBy({
-        by: ['user_id', 'package_type'],
-        where: {
-          deleted_at: null,
-          user_id: { in: userIds },
-        },
-        _sum: { quota: true },
-        orderBy: {
-          package_type: 'asc',
-        },
-      }),
-    ]);
-
-    type QuotaStruct = {
-      IELTS: {
-        Reading: number;
-        Listening: number;
-        Writing: number;
-        Speaking: number;
-        Complete: number;
-      };
-      TOEFL: {
-        Reading: number;
-        Listening: number;
-        'Structure & Written Expression': number;
-        Complete: number;
-      };
-    };
-
-    const mkDefaultQuota = (): QuotaStruct => ({
+    // Helper Struktur Data Default
+    const mkDefaultQuota = () => ({
       IELTS: {
         Reading: 0,
         Listening: 0,
@@ -138,46 +78,144 @@ export class MembersService {
       },
     });
 
-    const quotaByUser = new Map<number, QuotaStruct>();
+    // Jika tidak ada user, return langsung
+    if (!userIds.length) {
+      const data = members.map((m) => ({ ...m, quotas: mkDefaultQuota() }));
+      return { data, total, page, pageSize };
+    }
+
+    // 3. Ambil Aggregasi Quota & Usage Sekaligus (Batch Processing)
+    const [ieltsQuotaAgg, toeflQuotaAgg, ieltsUsedAgg, toeflUsedAgg] =
+      await this.db.$transaction([
+        // A. Total Quota IELTS (Sum)
+        this.db.ielts_user_quota.groupBy({
+          by: ['user_id', 'package_type'],
+          where: {
+            user_id: { in: userIds },
+            deleted_at: null,
+            expired_date: { gt: new Date() }, // Hanya hitung quota yg belum expired
+          },
+          _sum: { quota: true },
+          orderBy: {
+            package_type: 'asc',
+          },
+        }),
+
+        // B. Total Quota TOEFL (Sum)
+        this.db.toefl_user_quota.groupBy({
+          by: ['user_id', 'package_type'],
+          where: {
+            user_id: { in: userIds },
+            deleted_at: null,
+          },
+          _sum: { quota: true },
+          orderBy: {
+            package_type: 'asc',
+          },
+        }),
+
+        // C. Total Usage IELTS (Count)
+        this.db.ieltsUserTest.groupBy({
+          by: ['userId', 'type'], // Perhatikan: userId (camelCase) sesuai schema Test
+          where: {
+            userId: { in: userIds },
+            deletedAt: null,
+          },
+          _count: { _all: true },
+          orderBy: {
+            type: 'asc',
+          },
+        }),
+
+        // D. Total Usage TOEFL (Count)
+        this.db.toeflUserTest.groupBy({
+          by: ['userId', 'type'],
+          where: {
+            userId: { in: userIds },
+            deletedAt: null,
+          },
+          _count: { _all: true },
+          orderBy: {
+            type: 'asc',
+          },
+        }),
+      ]);
+
+    // 4. Inisialisasi Map
+    const quotaMap = new Map<number, ReturnType<typeof mkDefaultQuota>>();
     for (const uid of userIds) {
-      quotaByUser.set(uid, mkDefaultQuota());
+      quotaMap.set(uid, mkDefaultQuota());
     }
 
-    // Map IELTS quota
-    for (const row of ieltsAgg) {
-      const userId = row.user_id;
-      const typeId = row.package_type!;
-      const totalQuota = Number(row._sum?.quota ?? 0);
-      const label = IELTS_LABELS[typeId];
-      if (!label) continue;
+    // --- LOGIKA MAPPING IELTS ---
+    const IELTS_KEY_MAP: Record<
+      number,
+      keyof ReturnType<typeof mkDefaultQuota>['IELTS']
+    > = {
+      1: 'Listening',
+      2: 'Reading',
+      3: 'Writing',
+      4: 'Speaking',
+      5: 'Complete',
+      7: 'Complete',
+    };
 
-      const q = quotaByUser.get(userId) ?? mkDefaultQuota();
-      quotaByUser.set(userId, q);
-
-      // @ts-ignore – label sudah dipastikan valid
-      q.IELTS[label] = totalQuota;
+    // Tambah Quota IELTS
+    for (const row of ieltsQuotaAgg) {
+      const q = quotaMap.get(row.user_id);
+      const key = IELTS_KEY_MAP[row.package_type!];
+      if (q && key) {
+        // Fix TS: Gunakan ?. dan ?? 0
+        q.IELTS[key] += Number(row._sum?.quota ?? 0);
+      }
     }
 
-    // Map TOEFL quota
-    for (const row of toeflAgg) {
-      const userId = row.user_id;
-      const typeId = row.package_type!;
-      const totalQuota = Number(row._sum?.quota ?? 0);
-      const label = TOEFL_LABELS[typeId];
-      if (!label) continue;
-
-      const q = quotaByUser.get(userId) ?? mkDefaultQuota();
-      quotaByUser.set(userId, q);
-
-      // @ts-ignore
-      q.TOEFL[label] = totalQuota;
+    // Kurangi Usage IELTS
+    for (const row of ieltsUsedAgg) {
+      const q = quotaMap.get(row.userId);
+      const key = IELTS_KEY_MAP[row.type];
+      if (q && key) {
+        // Fix TS: Casting 'as any' untuk menghindari error property '_all'
+        const usedCount = Number((row._count as any)?._all ?? 0);
+        q.IELTS[key] = Math.max(0, q.IELTS[key] - usedCount);
+      }
     }
 
+    // --- LOGIKA MAPPING TOEFL ---
+    const TOEFL_KEY_MAP: Record<
+      number,
+      keyof ReturnType<typeof mkDefaultQuota>['TOEFL']
+    > = {
+      1: 'Listening',
+      2: 'Structure & Written Expression',
+      3: 'Reading',
+      4: 'Complete',
+    };
+
+    // Tambah Quota TOEFL
+    for (const row of toeflQuotaAgg) {
+      const q = quotaMap.get(row.user_id);
+      const key = TOEFL_KEY_MAP[row.package_type!];
+      if (q && key) {
+        q.TOEFL[key] += Number(row._sum?.quota ?? 0);
+      }
+    }
+
+    // Kurangi Usage TOEFL
+    for (const row of toeflUsedAgg) {
+      const q = quotaMap.get(row.userId);
+      const key = TOEFL_KEY_MAP[row.type];
+      if (q && key) {
+        // Fix TS: Casting 'as any'
+        const usedCount = Number((row._count as any)?._all ?? 0);
+        q.TOEFL[key] = Math.max(0, q.TOEFL[key] - usedCount);
+      }
+    }
+
+    // 5. Final Result
     const data = members.map((m) => ({
       ...m,
-      quotas: quotaByUser.get(m.user_id) ?? mkDefaultQuota(),
-      // optional: bisa tambahkan testsCompleted di sini kalau sudah ada tabel hasil test
-      // testsCompleted: 0,
+      quotas: quotaMap.get(m.user_id) ?? mkDefaultQuota(),
     }));
 
     return { data, total, page, pageSize };
