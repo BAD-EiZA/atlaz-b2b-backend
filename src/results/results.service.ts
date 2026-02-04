@@ -51,8 +51,9 @@ export class ResultsService {
     if (dto.q) {
       whereMember.users = {
         OR: [
-          { name: { contains: dto.q, mode: 'insensitive' } },
-          { email: { contains: dto.q, mode: 'insensitive' } },
+          // REMOVED mode: 'insensitive'
+          { name: { contains: dto.q } }, 
+          { email: { contains: dto.q } },
         ],
       };
     }
@@ -274,8 +275,9 @@ export class ResultsService {
     if (dto.q) {
       whereMember.users = {
         OR: [
-          { name: { contains: dto.q, mode: 'insensitive' } },
-          { email: { contains: dto.q, mode: 'insensitive' } },
+          // REMOVED mode: 'insensitive'
+          { name: { contains: dto.q } }, 
+          { email: { contains: dto.q } },
         ],
       };
     }
