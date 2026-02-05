@@ -61,22 +61,26 @@ export class MembersService {
 
     const userIds = members.map((m) => m.user_id).filter(Boolean);
 
-    // Helper Struktur Data Default
+    // --- MODIFICATION START: Update Helper Struktur Data ---
+    // Kita ubah value dari number menjadi object { count, expiry }
+    const defaultItem = () => ({ count: 0, expiry: null as Date | null });
+
     const mkDefaultQuota = () => ({
       IELTS: {
-        Reading: 0,
-        Listening: 0,
-        Writing: 0,
-        Speaking: 0,
-        Complete: 0,
+        Reading: defaultItem(),
+        Listening: defaultItem(),
+        Writing: defaultItem(),
+        Speaking: defaultItem(),
+        Complete: defaultItem(),
       },
       TOEFL: {
-        Reading: 0,
-        Listening: 0,
-        'Structure & Written Expression': 0,
-        Complete: 0,
+        Reading: defaultItem(),
+        Listening: defaultItem(),
+        'Structure & Written Expression': defaultItem(),
+        Complete: defaultItem(),
       },
     });
+    // --- MODIFICATION END ---
 
     // Jika tidak ada user, return langsung
     if (!userIds.length) {
@@ -87,44 +91,41 @@ export class MembersService {
     // 3. Ambil Aggregasi Quota & Usage Sekaligus (Batch Processing)
     const [ieltsQuotaAgg, toeflQuotaAgg, ieltsUsedAgg, toeflUsedAgg] =
       await this.db.$transaction([
-        // A. Total Quota IELTS (Sum)
+        // A. Total Quota IELTS (Sum & Max Expiry)
         this.db.ielts_user_quota.groupBy({
           by: ['user_id', 'package_type'],
           where: {
             user_id: { in: userIds },
             deleted_at: null,
-            expired_date: { gt: new Date() }, // Hanya hitung quota yg belum expired
+            expired_date: { gt: new Date() },
           },
           _sum: { quota: true },
-          orderBy: {
-            package_type: 'asc',
-          },
+          _max: { expired_date: true }, // <--- AMBIL MAX EXPIRED DATE
+          orderBy: { package_type: 'asc' },
         }),
 
-        // B. Total Quota TOEFL (Sum)
+        // B. Total Quota TOEFL (Sum & Max Expiry)
         this.db.toefl_user_quota.groupBy({
           by: ['user_id', 'package_type'],
           where: {
             user_id: { in: userIds },
             deleted_at: null,
+            // expired_date check jika perlu ditambahkan untuk TOEFL juga
           },
           _sum: { quota: true },
-          orderBy: {
-            package_type: 'asc',
-          },
+          _max: { expired_date: true }, // <--- AMBIL MAX EXPIRED DATE
+          orderBy: { package_type: 'asc' },
         }),
 
         // C. Total Usage IELTS (Count)
         this.db.ieltsUserTest.groupBy({
-          by: ['userId', 'type'], // Perhatikan: userId (camelCase) sesuai schema Test
+          by: ['userId', 'type'],
           where: {
             userId: { in: userIds },
             deletedAt: null,
           },
           _count: { _all: true },
-          orderBy: {
-            type: 'asc',
-          },
+          orderBy: { type: 'asc' },
         }),
 
         // D. Total Usage TOEFL (Count)
@@ -135,9 +136,7 @@ export class MembersService {
             deletedAt: null,
           },
           _count: { _all: true },
-          orderBy: {
-            type: 'asc',
-          },
+          orderBy: { type: 'asc' },
         }),
       ]);
 
@@ -165,8 +164,9 @@ export class MembersService {
       const q = quotaMap.get(row.user_id);
       const key = IELTS_KEY_MAP[row.package_type!];
       if (q && key) {
-        // Fix TS: Gunakan ?. dan ?? 0
-        q.IELTS[key] += Number(row._sum?.quota ?? 0);
+        q.IELTS[key].count += Number(row._sum?.quota ?? 0);
+        // Set expiry date (ambil yang paling jauh/max)
+        q.IELTS[key].expiry = row._max?.expired_date ?? null;
       }
     }
 
@@ -175,9 +175,11 @@ export class MembersService {
       const q = quotaMap.get(row.userId);
       const key = IELTS_KEY_MAP[row.type];
       if (q && key) {
-        // Fix TS: Casting 'as any' untuk menghindari error property '_all'
         const usedCount = Number((row._count as any)?._all ?? 0);
-        q.IELTS[key] = Math.max(0, q.IELTS[key] - usedCount);
+        q.IELTS[key].count = Math.max(0, q.IELTS[key].count - usedCount);
+        // Jika quota habis (0), expiry date bisa kita set null atau biarkan history-nya
+        // Di sini kita biarkan saja, atau set null jika count 0 tergantung kebutuhan UI
+        if (q.IELTS[key].count === 0) q.IELTS[key].expiry = null;
       }
     }
 
@@ -197,7 +199,8 @@ export class MembersService {
       const q = quotaMap.get(row.user_id);
       const key = TOEFL_KEY_MAP[row.package_type!];
       if (q && key) {
-        q.TOEFL[key] += Number(row._sum?.quota ?? 0);
+        q.TOEFL[key].count += Number(row._sum?.quota ?? 0);
+        q.TOEFL[key].expiry = row._max?.expired_date ?? null;
       }
     }
 
@@ -206,9 +209,9 @@ export class MembersService {
       const q = quotaMap.get(row.userId);
       const key = TOEFL_KEY_MAP[row.type];
       if (q && key) {
-        // Fix TS: Casting 'as any'
         const usedCount = Number((row._count as any)?._all ?? 0);
-        q.TOEFL[key] = Math.max(0, q.TOEFL[key] - usedCount);
+        q.TOEFL[key].count = Math.max(0, q.TOEFL[key].count - usedCount);
+        if (q.TOEFL[key].count === 0) q.TOEFL[key].expiry = null;
       }
     }
 
