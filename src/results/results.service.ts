@@ -40,13 +40,15 @@ export class ResultsService {
   /* ==========================================================
    * LIST IELTS RESULTS (untuk table utama ResultsPage)
    * ========================================================== */
+  // ✅ FULL CODE: listIelts (ambil user_profiles langsung, include certificatePayload, orgLogo wajib)
+
   async listIelts(orgId: number, dto: any) {
     const page = dto.page ?? 1;
     const pageSize = dto.pageSize ?? 10;
     const skip = (page - 1) * pageSize;
     const take = pageSize;
 
-    // ✅ org partner logo wajib
+    // ✅ org partner logo wajib (b2b_orgs.logo)
     const org = await this.prisma.b2b_orgs.findFirst({
       where: { id: orgId, deleted_at: null },
       select: { name: true, logo: true },
@@ -91,6 +93,34 @@ export class ResultsService {
 
     const userIds = members.map((m: any) => m.user_id);
 
+    // ✅ ambil profiles langsung dari user_profiles (tanpa join relation)
+    const profiles = await this.prisma.user_profiles.findMany({
+      where: {
+        user_id: { in: userIds },
+        deleted_at: null,
+      },
+      select: {
+        user_id: true,
+        nationality: true,
+        country_origin: true,
+        first_language: true,
+      },
+    });
+
+    const profileByUserId = new Map<
+      number,
+      {
+        nationality: string;
+        country_origin: string;
+        first_language: string;
+      }
+    >();
+
+    for (const p of profiles) {
+      profileByUserId.set(p.user_id, p);
+    }
+
+    // Semua IELTS test yang sudah selesai
     const tests = await this.prisma.ieltsUserTest.findMany({
       where: {
         userId: { in: userIds },
@@ -101,6 +131,7 @@ export class ResultsService {
       orderBy: { createdAt: 'desc' },
     });
 
+    // Kalau belum ada test sama sekali
     if (!tests.length) {
       const data = members.map((m: any) => ({
         id: m.users.id,
@@ -122,9 +153,11 @@ export class ResultsService {
     const tokens = tests.map((t: any) => t.token).filter((t: any) => !!t);
 
     const [certs, results, typeRows] = await this.prisma.$transaction([
+      // full certificate untuk COMPLETE
       this.prisma.ieltsFullTestCertificate.findMany({
         where: { token: { in: tokens } },
       }),
+      // hasil untuk non-complete (dan bisa juga fallback)
       this.prisma.ieltsUserTestResult.findMany({
         where: {
           ieltsUserTestId: { in: testIds },
@@ -152,14 +185,15 @@ export class ResultsService {
       typeName[t.id] = t.type ?? `Type ${t.id}`;
     }
 
+    // ✅ helper untuk payload certificate (dipakai FE react-pdf)
     const buildIeltsCertificatePayload = (args: {
       participantName: string;
       registrationId: string;
       testDate: Date;
 
-      countryOfOrigin?: string | null;
-      nationality?: string | null;
-      firstLanguage?: string | null;
+      nationality: string;
+      countryOfOrigin: string;
+      firstLanguage: string;
 
       listeningScore: number | null;
       readingScore: number | null;
@@ -173,14 +207,13 @@ export class ResultsService {
       orgName: string | null;
       orgLogo: string; // ✅ wajib
     }) => {
-      // default angka ke 0 biar aman dipakai .toFixed(1) di PDF component
       return {
         participantName: args.participantName,
         registrationId: args.registrationId,
         testDate: args.testDate,
 
-        countryOfOrigin: args.countryOfOrigin ?? '-',
         nationality: args.nationality ?? '-',
+        countryOfOrigin: args.countryOfOrigin ?? '-',
         firstLanguage: args.firstLanguage ?? '-',
 
         listeningScore: args.listeningScore ?? 0,
@@ -193,12 +226,14 @@ export class ResultsService {
         generalComment: args.generalComment ?? '-',
 
         orgs: args.orgName ? { name: args.orgName } : null,
-        orgLogo: args.orgLogo, // ✅ wajib
+        orgLogo: args.orgLogo,
       };
     };
 
     const data = members.map((member: any) => {
       const userId = member.user_id;
+
+      const profile = profileByUserId.get(userId) || null;
 
       const userTests = tests
         .filter((t: any) => t.userId === userId)
@@ -235,6 +270,7 @@ export class ResultsService {
         let speaking: number | null = null;
         let overall: number | null = null;
 
+        // default untuk payload
         let registrationIdForCert = t.token ?? String(t.id);
         let testDateForCert = new Date(t.createdAt);
         let generalCommentForCert: string | null = '-';
@@ -242,13 +278,14 @@ export class ResultsService {
 
         if (isComplete && cert) {
           // ✅ schema IeltsFullTestCertificate (snake_case)
-          listening = Number(cert.listening_score);
-          reading = Number(cert.reading_score);
-          writing = Number(cert.writing_score);
-          speaking = Number(cert.speaking_score);
-          overall = Number(cert.overall_band);
+          listening = Number(cert.listening_score ?? null);
+          reading = Number(cert.reading_score ?? null);
+          writing = Number(cert.writing_score ?? null);
+          speaking = Number(cert.speaking_score ?? null);
+          overall = Number(cert.overall_band ?? null);
 
           registrationIdForCert = cert.registration_id ?? registrationIdForCert;
+
           testDateForCert = cert.test_date
             ? new Date(cert.test_date)
             : testDateForCert;
@@ -256,20 +293,20 @@ export class ResultsService {
           generalCommentForCert = cert.general_comment ?? '-';
           cefrLevelForCert = cert.cefr_level ?? '-';
         } else if (resOverall != null && !Number.isNaN(resOverall)) {
-          // section test
-          if (lowerLabel.includes('listen')) listening = resOverall;
-          else if (lowerLabel.includes('read')) reading = resOverall;
-          else if (lowerLabel.includes('writ')) writing = resOverall;
-          else if (lowerLabel.includes('speak')) speaking = resOverall;
-
+          // section tests (listening/reading/writing/speaking)
+          if (lowerLabel.includes('listen')) {
+            listening = resOverall;
+          } else if (lowerLabel.includes('read')) {
+            reading = resOverall;
+          } else if (lowerLabel.includes('writ')) {
+            writing = resOverall;
+          } else if (lowerLabel.includes('speak')) {
+            speaking = resOverall;
+          }
           overall = resOverall;
-
-          // kalau kamu punya comment di result table, bisa dipakai:
-          // generalCommentForCert = res?.comment ?? "-";
-          // cefrLevelForCert = res?.cefrLevel ?? "-";
         }
 
-        // simpan latest bands
+        // set latest per skill (ambil yang terbaru dulu)
         if (listening != null && latestBands.listening == null)
           latestBands.listening = listening;
         if (reading != null && latestBands.reading == null)
@@ -279,12 +316,17 @@ export class ResultsService {
         if (speaking != null && latestBands.speaking == null)
           latestBands.speaking = speaking;
 
-        // detail max 5
+        // simpan max 5 attempt
         if (testDetails.length < 5) {
           const certificatePayload = buildIeltsCertificatePayload({
             participantName: member.users.name,
             registrationId: registrationIdForCert,
             testDate: testDateForCert,
+
+            // ✅ dari user_profiles
+            nationality: profile?.nationality ?? '-',
+            countryOfOrigin: profile?.country_origin ?? '-',
+            firstLanguage: profile?.first_language ?? '-',
 
             listeningScore: listening,
             readingScore: reading,
@@ -305,19 +347,17 @@ export class ResultsService {
             isComplete,
             type: label,
             date: t.createdAt,
-
             listening,
             reading,
             writing,
             speaking,
             overall,
-
             certificatePayload,
           });
         }
       }
 
-      // ringkasan overall band jika 4 skill lengkap
+      // overallBand summary (kalau 4 skill sudah ada)
       let overallBand: number | null = null;
       const bands = [
         latestBands.listening,
@@ -326,10 +366,12 @@ export class ResultsService {
         latestBands.speaking,
       ];
       if (bands.every((b) => typeof b === 'number')) {
+        // pakai fungsi kamu yang sudah ada
         overallBand = this.calculateIeltsOverall(bands as number[]);
       }
 
       const recentlyDone = userTests.length ? userTests[0].createdAt : null;
+      const createdAt = member.created_at;
 
       return {
         id: member.users.id,
@@ -343,7 +385,7 @@ export class ResultsService {
         speakingBand: latestBands.speaking,
 
         recentlyDone,
-        createdAt: member.created_at,
+        createdAt,
 
         testDetails,
       };
