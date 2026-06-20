@@ -14,7 +14,7 @@ RUN apk add --no-cache openssl libc6-compat
 # Enable pnpm via corepack
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 
 # Cache-friendly copies
 COPY package.json pnpm-lock.yaml ./
