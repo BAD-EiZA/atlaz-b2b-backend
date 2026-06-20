@@ -40,10 +40,11 @@ export class MembersService {
     if (dto.role) where.role = dto.role;
     if (dto.status !== undefined)
       where.status = String(dto.status).toLowerCase() === 'true';
-    if (dto.q) {
+    const search = dto.q?.trim();
+    if (search) {
       where.OR = [
-        { users: { name: { contains: dto.q, mode: 'insensitive' } } },
-        { users: { email: { contains: dto.q, mode: 'insensitive' } } },
+        { users: { name: { contains: search } } },
+        { users: { email: { contains: search } } },
       ];
     }
 
